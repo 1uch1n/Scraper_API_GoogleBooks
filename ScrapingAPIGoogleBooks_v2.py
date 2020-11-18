@@ -1,4 +1,4 @@
-# Author : Louis Leclerc
+# Author: Louis Leclerc
 # Creation date: 06/10/2020
 # Last updated: 18/11/2020
 # Description:
