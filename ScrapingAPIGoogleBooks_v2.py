@@ -1,44 +1,47 @@
-# Auteur : Louis Leclerc
-# Date : 06/10/2020 - 27/10/2020
-# Description :
+# Author : Louis Leclerc
+# Creation date: 06/10/2020
+# Last updated: 18/11/2020
+# Description:
     # scraping API Google Books
-    # recueille données bibliographiques à partir d'une recherche automatisée
-    # input = liste de titres d'ouvrage en csv
-    # output = csv des info Google Books sur ces ouvrages
+    # collect bibliographic data from automated researches
+    # input = CSV of book titles (only one column without first row)
+    # output = CSV of Google Books data on these books
 
-# Notes sur l'API Google Books
-    # Dans le vocabulaire de l'API, "volume" = informations bibliographies (titre, auteur, éditeur, date, description...)
-    # Clé API pour les données publiques
-    # authentification par token pour fonctionnalités plus poussées (pas nécessaire ici)
-    # URL de requête-type = https://www.googleapis.com/books/v1/volumes?q=search+terms&key=yourAPIKey
-    # plus d'info sur https://developers.google.com/books/docs/overview
+# Notes on Google Books API
+    # In the API vocabulary, "volume" = bibliographic information (title, author, publisher, publication date, description...)
+    # public data available through API Key
+    # token identification for advanced researh (unnecessary here)
+    # Request URL model = https://www.googleapis.com/books/v1/volumes?q=search+terms&key=yourAPIKey
+    # more info on https://developers.google.com/books/docs/overview
 
 
-# Importation des modules
-import requests # pour scraper
-import json     # pour lire le rendu de l'API
-import csv      # pour écrire un csv en sortie du programme
-from time import time # pour évaluer temps des requêtes GET
+#importing modules
+import requests #to scrap
+import json     #to read API's response
+import csv      #to read input CSV and write CSV as output
+import unidecode #to turn latin accentuated characters into URL compatible letters
+from time import time #to  analyze time taken by request
 
-# localisation du fichier des valeurs à chercher
+# location of files
 import os
 os.chdir("/home/luchin/Documents/Projets Data/Scraping BDD theatre")
 
-# définition de variables en amont
+#definition of upstream variables
 my_file = "input_table.csv"
 urlAPI = "https://www.googleapis.com/books/v1/volumes?q="
 keyAPI = "&key=AIzaSyCbxRGAL4pcMVeL0GoaE9cKVP5LmoimpCU"
+country_query = "&country=CL" #set to research in Chile
 
 
-# BLOC 1 : fonction qui convertit les rows d'un CSV en string et les retourne dans une liste
+#function converting each row of a single-column CSV into a string and returns them in a list
 def open_file(file):
-    with open(file, encoding="Windows-1252") as f:
+    with open(file, encoding="latin-1") as f:
         res = f.read().splitlines()
     f.close()
-    return res # retourne une liste avec un row csv par élément (il faut un csv d'une seule colonne "titre" en input)
+    return res #return a list with one row per element
 
 
-# BLOC 2 : fonction qui crée une URL de requête valide à partir d'un nom
+#function creating a valid request URL from any title
 def correct_url(input_title):
     output_title = ""
     for i in input_title:
@@ -46,30 +49,41 @@ def correct_url(input_title):
             output_title += i
         else:
             output_title += "+"
-    return urlAPI + output_title + keyAPI
+    compatible_title = unidecode.unidecode(output_title)
+    res = urlAPI + compatible_title + keyAPI + country_query
+    return res
 
 
-# BLOC 3 : fonction qui sélectionne les données pertinentes dans "volume" pour les 10 premiers résultats
+#function selecting relevant data in "volume" for the first 10 results
+#also prints time of the request
 def scraper(url):
-    response = requests.get(url) #réponse de l'API <class 'requests.models.Response'>
-    page_content = response.text #on transforme contenu de la page en string
-    result_dct = json.loads(page_content) #on crée un dictionnaire à partir du contenu en string
-    n = result_dct["totalItems"] #nombre de résultats (objet = int)
-    if n > 10:     # si nombre de résultat > 10, on limite
+    print(f"Now scrapping URL: {url}")
+    start_time = time()
+    response = requests.get(url) #API answer: <class 'requests.models.Response'>
+    elapsed_time = time() - start_time
+    print(f"Scrap intent done \n Request response: {response} \n Response delay : {round(elapsed_time, 2)} seconds")
+    page_content = response.text #turns page content into string
+    result_dct = json.loads(page_content) #create dictionnary from string content
+    n = result_dct["totalItems"] #number of results (object = int)
+    if n > 10:     # if number of results > 10, we set a limit
         n = 10
-    all_volume_info = result_dct["items"] #elements contenant les infos sur tous les résultats (objet = liste)
-    res_dict = {} #dictionnaire vide pour accueillir les n résultats de "items"
+    if "items" in result_dct:
+        all_volume_info = result_dct["items"] #elements containing info on all résults (object = list)
+    else:
+        all_volume_info=[{"volumeInfo":""}] #creates empty dict in a list if no search result
+    res_dict = {} #dictionnary to gather n results of "items"
 
     for i in range(0, n):
-        some_volume_info = all_volume_info[i] #on va chercher info sur ième résultat (objet = dictio)
-        volume_info = some_volume_info["volumeInfo"] #on prend infos qui nous intéresse (objet = dictio)
+        some_volume_info = all_volume_info[i] #fetching info on the ith book (object = dict)
+        volume_info = some_volume_info["volumeInfo"] #selecting the revelant info on this particular book (object = dict)
 
-        res_list = [] #liste vide pour accueillir les infos de chaque résultat. Se réinitialise pour nouveaux résultats.
-        msg_return_error = "N/A" #valeur vide si absence de données, pour s'assurer de la symétrie des colonnes en csv.
+        res_list = [] #empty list to gather info on the book i, reinitialized if new book
+        msg_return_error = "N/A" #empty value if no data, to ensure that output CSV will have symetric columns
 
-        # on définit chaque métadonné qui nous intéresse dans le dict en input
-        # chaque valeur revient sous forme de string s'il y a la clé correspondantes
-        # si absence de clé, la valeur sera par défaut le message d'erreur
+        # defining the relevant metadata within input dict
+        # all values are returned as a string if there's a corresponding key
+        # apart from "authors", which is returned as a list (even if there's only one author)
+        # if there is no corresponding key, the value returned will be the error message above
 
         if "title" in volume_info:
             volume_title = volume_info["title"]
@@ -94,37 +108,59 @@ def scraper(url):
         else:
             volume_date = msg_return_error
         res_list.extend([volume_title, volume_authors, volume_publisher, volume_date])
+        print(f"Key {i} : {res_list}")
         res_dict.update({i: res_list})
-    return res_dict # retourne les éléments du DICT en input en liste d'éléments en output
+    return res_dict
 
 
-# BLOC 5 : boucle de toutes les fonctions à partir d'un fichier en input
-# Retourne une liste en output, et crée un CSV avec les données au passage
-
+#buckle of all functions which returns a list from a CSV in input
+#also writes a CSV with all the result, a first row and the original book title
 def general_function(input_file):
-    with open("output_table.csv", "w", newline="", encoding="Windows-1252") as csvfile:
+    with open("output_table.csv", "w", newline="", encoding="utf-8") as csvfile:
         final_res = []
-        final_table = csv.writer(csvfile, delimiter="|")
+        final_table = csv.writer(csvfile, delimiter="|", quotechar="'")
 
-        # étape 1 = créer liste d'URL à scraper
+        #creating first row
+        first_row = ["Original Title"]
+        for n in range(1, 11):
+            ntitle = [f"Result {n} - Title"]
+            nauthor = [f"Result {n} - Authors"]
+            npublisher = [f"Result {n} - Publishers"]
+            ndate = [f"Result {n} - Publication Date"]
+            first_row.extend(ntitle)
+            first_row.extend(nauthor)
+            first_row.extend(npublisher)
+            first_row.extend(ndate)
+        final_table.writerow(first_row)
+
+        #creating list of original titles and URLs to be scrapped
+        list_original_titles = []
         list_valid_URL = []
         for i in open_file(input_file):
+            list_original_titles.extend([i])
             list_valid_URL.extend([correct_url(i)])
 
-        # étape 2 = scraper données de la liste d'URL et l'importer dans un CSV en ajoutant le temps de requête GET
+        #data is scrapped from a list of URLs and imported into a CSV
+        #also prints request delay
         num_req = 1
+        total_time = 0
         for j in list_valid_URL:
             start_time = time() # pour évaluer temps de chaque requête
+            print(f"About to scrap data on: '{list_original_titles[list_valid_URL.index(j)]}'")
             relevant_data = scraper(j)
-            elapsed_time = time()-start_time
-            print(f"Requête n°{num_req} : {round(elapsed_time, 2)} secondes")
+            elapsed_time = time() - start_time
             num_req += 1
-            for j in relevant_data:
-                final_table.writerow(relevant_data[j])
-                final_res.extend(relevant_data[j])
+            total_time += elapsed_time
+            list_data = []
+            list_data.extend([list_original_titles[list_valid_URL.index(j)]])
+            for n in relevant_data:
+                list_data.extend(relevant_data[n])
+            final_table.writerow(list_data)
+            final_res.extend(list_data)
+            print(f"Request {num_req} done\n New row added to the final table: {list_data} \n")
+        avg_time = total_time/num_req
+        print(f"Average request time: {round(avg_time, 2)} seconds")
     return final_res
-
-
 
 
 print(general_function(my_file))
