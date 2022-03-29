@@ -21,9 +21,7 @@ Problem: Searches from Google Books can return very diverse results, sometimes q
 
 Objective: Selecting the closest result to the original search request among the first 10 results of Google.
 
-Short description of the script:
-
-A very simple scoring algorythm evaluates to which extent each result from Google Books is similar to the original search request
+Short description of the script: A very simple scoring algorythm evaluates to which extent each result from Google Books is similar to the original search request
 
 Input = original books title + 10 search results from Google Books
 
